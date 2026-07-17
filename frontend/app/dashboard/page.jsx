@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Wallet2, TrendingUp, Clock, ShieldCheck } from 'lucide-react';
 import { useTurnkey } from '@turnkey/react-wallet-kit';
 import AppShell from '@/components/AppShell';
@@ -15,10 +15,10 @@ import StatsCard from '@/components/StatsCard';
 import ActivityChart from '@/components/ActivityChart';
 import { transactions, securityStatus, walletEvents, marketOverview, portfolioHistory } from '@/lib/placeholder-data';
 import { formatTimestamp } from '@/lib/format';
-import { useRef } from "react";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 const NETWORK = 'Ethereum Sepolia';
+const EMPTY_BALANCE = { balance: '0', symbol: 'ETH', network: NETWORK };
 const TREND_TONE = { up: 'success', down: 'danger', flat: 'default' };
 
 function ethereumAddress(wallet) {
@@ -30,10 +30,11 @@ export default function DashboardPage() {
   const { session, fetchWallets, createWallet, createWalletAccounts } = useTurnkey();
   const [wallet, setWallet] = useState(null);
   const [walletError, setWalletError] = useState('');
-    useEffect(() => {
-    if (!session?.organizationId) return;
+  const [balance, setBalance] = useState(EMPTY_BALANCE);
+  const [isBalanceLoading, setIsBalanceLoading] = useState(false);
 
-    if (initialized.current) return;
+  useEffect(() => {
+    if (!session?.organizationId || initialized.current) return;
 
     initialized.current = true;
 
@@ -42,29 +43,24 @@ export default function DashboardPage() {
         setWalletError('');
         let wallets = await fetchWallets();
 
-      console.log("TURNKEY WALLETS");
-      console.log(JSON.stringify(wallets, null, 2));
+        let embeddedWallet = wallets.find((item) => ethereumAddress(item));
 
-      // If any wallet already exists, use it.
-      let embeddedWallet = wallets.find(wallet => ethereumAddress(wallet));
+        if (!embeddedWallet) {
+          const walletId = await createWallet({
+            walletName: 'Vault Embedded Wallet',
+            accounts: [],
+            organizationId: session.organizationId,
+          });
 
-      if (!embeddedWallet) {
-        const walletId = await createWallet({
-          walletName: "Vault Embedded Wallet",
-          accounts: [],
-          organizationId: session.organizationId,
-        });
+          await createWalletAccounts({
+            walletId,
+            accounts: ['ADDRESS_FORMAT_ETHEREUM'],
+            organizationId: session.organizationId,
+          });
 
-        await createWalletAccounts({
-          walletId,
-          accounts: ["ADDRESS_FORMAT_ETHEREUM"],
-          organizationId: session.organizationId,
-        });
-
-        wallets = await fetchWallets();
-
-        embeddedWallet = wallets.find(wallet => wallet.walletId === walletId);
-      }
+          wallets = await fetchWallets();
+          embeddedWallet = wallets.find((item) => item.walletId === walletId);
+        }
 
         const walletAddress = ethereumAddress(embeddedWallet);
         if (!embeddedWallet?.walletId || !walletAddress) throw new Error('Turnkey did not return an Ethereum wallet account.');
@@ -90,15 +86,63 @@ export default function DashboardPage() {
     initializeWallet();
   }, [session?.organizationId]);
 
+  useEffect(() => {
+    if (!wallet?.walletId) return;
+
+    let cancelled = false;
+
+    const loadBalance = async () => {
+      setIsBalanceLoading(true);
+
+      try {
+        const accessToken = window.localStorage.getItem('accessToken');
+        if (!accessToken) {
+          if (!cancelled) setBalance(EMPTY_BALANCE);
+          return;
+        }
+
+        const response = await fetch(`${BACKEND_URL}/api/wallet/balance`, {
+          credentials: 'include',
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const payload = await response.json().catch(() => ({}));
+        const walletBalance = payload.balance;
+
+        if (!response.ok || !walletBalance || typeof walletBalance.balance !== 'string') {
+          if (!cancelled) setBalance(EMPTY_BALANCE);
+          return;
+        }
+
+        if (!cancelled) {
+          setBalance({
+            balance: walletBalance.balance,
+            symbol: walletBalance.symbol || 'ETH',
+            network: walletBalance.network || NETWORK,
+          });
+        }
+      } catch {
+        if (!cancelled) setBalance(EMPTY_BALANCE);
+      } finally {
+        if (!cancelled) setIsBalanceLoading(false);
+      }
+    };
+
+    loadBalance();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [wallet?.walletId]);
+
   return (
     <AppShell>
       <PageHeader title="Welcome back" description="Here's what's happening with your wallet today." />
       {walletError && <p role="alert" className="mb-4 text-sm text-danger">{walletError}</p>}
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="flex flex-col gap-6 lg:col-span-2">
-          {wallet ? <WalletSummary address={wallet.walletAddress} walletId={wallet.walletId} network={wallet.network || NETWORK} /> : <Card padding="lg"><p className="text-sm text-text-secondary">Loading your embedded wallet…</p></Card>}
+          {wallet ? <WalletSummary address={wallet.walletAddress} walletId={wallet.walletId} network={balance.network} balance={balance.balance} symbol={balance.symbol} isBalanceLoading={isBalanceLoading} /> : <Card padding="lg"><p className="text-sm text-text-secondary">Loading your embedded wallet…</p></Card>}
           <QuickActions address={wallet?.walletAddress || ''} />
-          <div className="grid gap-4 sm:grid-cols-4"><StatsCard icon={Wallet2} label="Wallet ID" value={wallet?.walletId ? `${wallet.walletId.slice(0, 8)}…` : '—'} /><StatsCard icon={TrendingUp} label="Network" value={wallet?.network || NETWORK} /><StatsCard icon={TrendingUp} label="24h Change" value="—" /><StatsCard icon={Clock} label="Pending" value="—" /></div>
+          <div className="grid gap-4 sm:grid-cols-4"><StatsCard icon={Wallet2} label="Balance" value={isBalanceLoading ? 'Loading…' : `${balance.balance} ${balance.symbol}`} /><StatsCard icon={TrendingUp} label="Network" value={balance.network} /><StatsCard icon={TrendingUp} label="24h Change" value="—" /><StatsCard icon={Clock} label="Pending" value="—" /></div>
           <ActivityChart data={portfolioHistory} label="Activity Overview" rangeLabel="Last 14 days" />
           <div><h2 className="mb-4 text-base font-semibold text-text-primary">Recent Transactions</h2><RecentTransactions transactions={transactions} limit={4} /></div>
         </div>
