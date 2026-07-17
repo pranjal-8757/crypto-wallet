@@ -17,5 +17,5 @@ exports.saveWallet = asyncHandler(async (req, res) => {
 
 exports.getBalance = asyncHandler(async (req, res) => {
   const balance = await walletService.getBalance({ userId: req.user.id });
-  sendSuccess(res, 200, { balance });
+  return sendSuccess(res, 200, { balance });
 });
