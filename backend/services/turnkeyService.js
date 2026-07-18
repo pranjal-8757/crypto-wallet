@@ -1,6 +1,7 @@
 const { Turnkey } = require('@turnkey/sdk-server');
 const { ApiError } = require('../utils/helpers');
 const config = require('../config/turnkey');
+const logger = require('../utils/logger');
 
 let turnkeyClient;
 
@@ -65,4 +66,26 @@ async function getAuthenticatedUser({ userId, organizationId }) {
 }
 }
 
-module.exports = { getAuthenticatedUser };
+async function sendEthereumTransaction({ organizationId, from, to, value, nonce, gasLimit, maxFeePerGas, maxPriorityFeePerGas }) {
+  try {
+    const apiClient = getTurnkeyClient().apiClient();
+    const submission = await apiClient.ethSendTransaction({
+      organizationId,
+      parameters: { from, to, value, nonce, gasLimit, maxFeePerGas, maxPriorityFeePerGas, caip2: 'eip155:11155111' },
+    });
+    if (!submission?.sendTransactionStatusId) throw new Error('Turnkey did not return a transaction submission status.');
+
+    const status = await apiClient.pollTransactionStatus({
+      organizationId,
+      sendTransactionStatusId: submission.sendTransactionStatusId,
+    });
+    const transactionHash = status?.eth?.txHash;
+    if (!transactionHash) throw new Error('Turnkey did not return a transaction hash.');
+    return transactionHash;
+  } catch (error) {
+    logger.error('Turnkey rejected or failed to submit an Ethereum transaction.');
+    throw new ApiError(502, 'Turnkey was unable to submit the Ethereum transaction.');
+  }
+}
+
+module.exports = { getAuthenticatedUser, sendEthereumTransaction };
