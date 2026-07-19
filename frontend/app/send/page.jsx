@@ -7,10 +7,16 @@ import PageHeader from '@/components/ui/PageHeader';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import TransactionSummary from '@/components/TransactionSummary';
-import VerificationModal from '@/components/VerificationModal';
+import VisualPasswordModal from '@/components/visual-password/VisualPasswordModal';
 import { wallet } from '@/lib/placeholder-data';
 
 const NETWORKS = ['Ethereum Sepolia', 'Arbitrum Sepolia', 'Base Sepolia'];
+
+// Mock flag simulating whether this user has already configured a
+// Visual Password. Flip to `true` to exercise the returning-user
+// verification journey instead of first-time setup -- no backend
+// exists yet to persist this for real.
+const hasVisualPassword = false;
 
 export default function SendPage() {
   const [recipient, setRecipient] = useState('');
@@ -24,7 +30,7 @@ export default function SendPage() {
   /**
    * This page only PREPARES a transaction -- it never signs or
    * broadcasts one. "Continue" opens the Visual Password SDK's
-   * VerificationModal with the prepared draft (recipient, amount,
+   * VisualPasswordModal with the prepared draft (recipient, amount,
    * network). On success, the modal's onVerified callback receives
    * that same draft; in production that's where a verification token
    * would be handed to Turnkey to actually sign and submit the
@@ -166,12 +172,14 @@ export default function SendPage() {
         </div>
       </div>
 
-      <VerificationModal
+      <VisualPasswordModal
         open={verificationOpen}
         onClose={() => setVerificationOpen(false)}
         transaction={{ recipient, amount, symbol: 'ETH', network }}
         onVerified={handleVerified}
+        hasVisualPassword={hasVisualPassword}
       />
     </AppShell>
   );
 }
+
