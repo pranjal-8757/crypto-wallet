@@ -18,6 +18,7 @@ import Button from '../ui/Button';
  * @param {string} symbol
  * @param {string} verificationCode - placeholder, backend-issued in production
  */
+
 export default function AmountVerification({
   amount = '5',
   symbol = 'ETH',

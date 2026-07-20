@@ -1,16 +1,111 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import Modal from '../ui/Modal';
+import SetupWizard from './SetupWizard';
+import VerificationWizard from './VerificationWizard';
+
+// Mock stored credentials used whenever `hasVisualPassword` is true
+// and no fresh setup happened in this session -- matches the example
+// used throughout the spec (Word: chimney, Offset: 10, Position Keys:
+// P/G).
+const STORAGE_KEY = 'bankguard.visualPassword';
+
+/**
+ * Entry point for the Visual Password SDK's transaction-confirmation
+ * flow. Opens after Send -> Continue, before Turnkey ever signs
+ * anything.
+ *
+ * Two journeys, chosen by `hasVisualPassword`:
+ *  - First-time user (false): SetupWizard (Word -> Offset -> Position
+ *    Keys -> Confirm), then immediately continues into verification
+ *    using the credentials just entered, so the whole flow can be
+ *    exercised in one sitting.
+ *  - Returning user (true): straight into VerificationWizard using
+ *    the mock stored credentials above.
+ *
+ * Everything here is local/mock state -- no backend, no API calls.
+ *
+ * @param {boolean} open
+ * @param {() => void} onClose
+ * @param {{ recipient: string, amount: string, symbol: string, network: string }} transaction
+ * @param {(transaction: object) => void} onVerified
+ * @param {boolean} hasVisualPassword - simulates whether this user has
+ *   already configured a Visual Password. Toggle this to exercise
+ *   either journey.
+ */
+export default function VisualPasswordModal({
+  open,
+  onClose,
+  transaction,
+  onVerified,
+  hasVisualPassword = false,
+}) {
+  const [configured, setConfigured] = useState(false);
+  const [credentials, setCredentials] = useState(null);
+
+  // Reset back to the initial journey every time the modal is reopened.
+  useEffect(() => {
+    if (!open) return;
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    try {
+      const parsed = stored ? JSON.parse(stored) : null;
+      setConfigured(Boolean(parsed?.word && parsed?.offset && Array.isArray(parsed?.positionKeys)));
+      setCredentials(parsed);
+    } catch { setConfigured(false); setCredentials(null); }
+  }, [open, hasVisualPassword]);
+
+  const handleClose = () => {
+    onClose?.();
+  };
+
+  const handleSetupComplete = (newCredentials) => {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(newCredentials));
+    setCredentials(newCredentials);
+    setConfigured(true);
+  };
+
+  const handleVerified = (verification) => {
+    onVerified?.({ ...transaction, verification });
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={handleClose}
+      title="Visual Password"
+      theme="light"
+      maxWidth="2xl"
+    >
+      {configured && credentials ? (
+        <VerificationWizard
+          credentials={credentials}
+          transaction={transaction}
+          onVerified={handleVerified}
+          onCancel={handleClose}
+        />
+      ) : (
+        <SetupWizard onComplete={handleSetupComplete} />
+      )}
+    </Modal>
+  );
+}
+
+
+/*'use client';
+
 import { useMemo, useState } from 'react';
 import { ShieldCheck, Info } from 'lucide-react';
 import Button from '../ui/Button';
 
 const DIGIT_OPTIONS = Array.from({ length: 10 }, (_, i) => String(i));
-
+*/
 /**
  * Randomly reveals a contiguous slice of `word` (prefix, middle, or
  * suffix) and masks the rest with underscores -- e.g. "chimney" ->
  * "chi____", "___mn__", or "_____ey".
  */
+/*
 function maskWord(word) {
   const len = word.length;
   const mode = ['prefix', 'middle', 'suffix'][Math.floor(Math.random() * 3)];
@@ -41,7 +136,9 @@ function maskWord(word) {
  * 10-99), so the "computed value" always maps cleanly onto exactly
  * two Position Key digits.
  */
-function pickChallengeNumber(offset) {
+/*
+
+/*function pickChallengeNumber(offset) {
   const maxChallenge = Math.max(1, Math.min(9, 99 - offset));
   return 1 + Math.floor(Math.random() * maxChallenge);
 }
@@ -69,7 +166,9 @@ function pickChallengeNumber(offset) {
  * @param {[string, string]} positionKeys - stored position keys, e.g. ["P", "G"]
  * @param {() => void} onContinue
  */
-export default function WordChallenge({ word = 'chimney', offset = 10, positionKeys = ['P', 'G'], onContinue }) {
+/*
+
+/&* port default function WordChallenge({ word = 'chimney', offset = 10, positionKeys = ['P', 'G'], onContinue }) {
   const [challenge] = useState(() => ({
     masked: maskWord(word),
     value: pickChallengeNumber(offset),
@@ -184,3 +283,4 @@ export default function WordChallenge({ word = 'chimney', offset = 10, positionK
     </div>
   );
 }
+  */
