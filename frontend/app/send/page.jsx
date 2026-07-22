@@ -12,12 +12,6 @@ import { wallet } from '@/lib/placeholder-data';
 
 const NETWORKS = ['Ethereum Sepolia', 'Arbitrum Sepolia', 'Base Sepolia'];
 
-// Mock flag simulating whether this user has already configured a
-// Visual Password. Flip to `true` to exercise the returning-user
-// verification journey instead of first-time setup -- no backend
-// exists yet to persist this for real.
-const hasVisualPassword = false;
-
 export default function SendPage() {
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
@@ -177,7 +171,6 @@ export default function SendPage() {
         onClose={() => setVerificationOpen(false)}
         transaction={{ recipient, amount, symbol: 'ETH', network }}
         onVerified={handleVerified}
-        hasVisualPassword={hasVisualPassword}
       />
     </AppShell>
   );
