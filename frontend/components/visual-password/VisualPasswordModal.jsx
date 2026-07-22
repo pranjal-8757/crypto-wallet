@@ -25,39 +25,54 @@ const STORAGE_KEY = 'bankguard.visualPassword';
  *  - Returning user (true): straight into VerificationWizard using
  *    the mock stored credentials above.
  *
- * Everything here is local/mock state -- no backend, no API calls.
+ * Setup state is confirmed by the backend; browser storage only retains
+ * local rendering data after a successful setup response.
  *
  * @param {boolean} open
  * @param {() => void} onClose
  * @param {{ recipient: string, amount: string, symbol: string, network: string }} transaction
  * @param {(transaction: object) => void} onVerified
- * @param {boolean} hasVisualPassword - simulates whether this user has
- *   already configured a Visual Password. Toggle this to exercise
- *   either journey.
  */
 export default function VisualPasswordModal({
   open,
   onClose,
   transaction,
   onVerified,
-  hasVisualPassword = false,
 }) {
   const [configured, setConfigured] = useState(false);
   const [credentials, setCredentials] = useState(null);
+  const [loadingSetupStatus, setLoadingSetupStatus] = useState(false);
 
-  // Reset back to the initial journey every time the modal is reopened.
+  // MongoDB is the source of truth. Local storage contains only the client-side
+  // values needed to render this UI; it must never decide whether setup exists.
   useEffect(() => {
     if (!open) return;
     const timer = window.setTimeout(() => {
-      const stored = window.localStorage.getItem(STORAGE_KEY);
-      try {
-        const parsed = stored ? JSON.parse(stored) : null;
-        setConfigured(Boolean(parsed?.word && parsed?.offset && Array.isArray(parsed?.positionKeys)));
-        setCredentials(parsed);
-      } catch { setConfigured(false); setCredentials(null); }
+      const loadSetupStatus = async () => {
+        setLoadingSetupStatus(true);
+        try {
+          const response = await authenticatedFetch('/v1/setup');
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(payload.message || 'Unable to load Visual Password status.');
+
+          const stored = window.localStorage.getItem(STORAGE_KEY);
+          const parsed = stored ? JSON.parse(stored) : null;
+          const hasCachedCredentials = Boolean(parsed?.word && parsed?.offset && Array.isArray(parsed?.positionKeys));
+
+          if (!payload.configured) window.localStorage.removeItem(STORAGE_KEY);
+          setConfigured(Boolean(payload.configured && hasCachedCredentials));
+          setCredentials(payload.configured && hasCachedCredentials ? parsed : null);
+        } catch {
+          setConfigured(false);
+          setCredentials(null);
+        } finally {
+          setLoadingSetupStatus(false);
+        }
+      };
+      loadSetupStatus();
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [open, hasVisualPassword]);
+  }, [open]);
 
   const handleClose = () => {
     onClose?.();
@@ -93,7 +108,7 @@ export default function VisualPasswordModal({
       theme="light"
       maxWidth="2xl"
     >
-      {configured && credentials ? (
+      {loadingSetupStatus ? null : configured && credentials ? (
         <VerificationWizard
           credentials={credentials}
           transaction={transaction}
