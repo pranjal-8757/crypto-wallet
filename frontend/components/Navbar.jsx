@@ -2,8 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Search, Bell, Sun, Moon, Menu, ChevronDown, User, LogOut } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { logout } from '@/lib/auth';
+import { useTurnkey } from '@turnkey/react-wallet-kit';
 
 /**
  * Top header for the authenticated app shell.
@@ -18,11 +21,23 @@ import { useTheme } from '@/hooks/useTheme';
  * @param {() => void} onMenuClick - opens the mobile Sidebar drawer
  */
 export default function Navbar({ onMenuClick }) {
+  const router = useRouter();
   const { theme, toggleTheme, mounted } = useTheme();
+  const { logout: logoutTurnkey } = useTurnkey();
   const isDark = theme === 'dark';
 
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef(null);
+
+  const handleLogout = async () => {
+    setProfileOpen(false);
+    try {
+      await Promise.allSettled([logout(), logoutTurnkey()]);
+    } finally {
+      router.replace('/login');
+      router.refresh();
+    }
+  };
 
   // Close the profile menu on outside click or Escape.
   useEffect(() => {
@@ -143,6 +158,7 @@ export default function Navbar({ onMenuClick }) {
                 <button
                   type="button"
                   role="menuitem"
+                  onClick={handleLogout}
                   className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm text-text-secondary hover:bg-danger/10 hover:text-danger transition-colors"
                 >
                   <LogOut className="h-4 w-4" aria-hidden="true" />
