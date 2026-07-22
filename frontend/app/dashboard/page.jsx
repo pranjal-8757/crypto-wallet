@@ -15,6 +15,7 @@ import StatsCard from '@/components/StatsCard';
 import ActivityChart from '@/components/ActivityChart';
 import { transactions, securityStatus, walletEvents, marketOverview, portfolioHistory } from '@/lib/placeholder-data';
 import { formatTimestamp } from '@/lib/format';
+import { authenticatedFetch } from '@/lib/auth';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 const NETWORK = 'Ethereum Sepolia';
@@ -65,13 +66,9 @@ export default function DashboardPage() {
         const walletAddress = ethereumAddress(embeddedWallet);
         if (!embeddedWallet?.walletId || !walletAddress) throw new Error('Turnkey did not return an Ethereum wallet account.');
 
-        const accessToken = window.localStorage.getItem('accessToken');
-        if (!accessToken) throw new Error('Your application session has expired. Please sign in again.');
-
-        const response = await fetch(`${BACKEND_URL}/api/wallet`, {
+        const response = await authenticatedFetch('/api/wallet', {
           method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ walletId: embeddedWallet.walletId, walletAddress }),
         });
         const payload = await response.json().catch(() => ({}));
@@ -95,16 +92,7 @@ export default function DashboardPage() {
       setIsBalanceLoading(true);
 
       try {
-        const accessToken = window.localStorage.getItem('accessToken');
-        if (!accessToken) {
-          if (!cancelled) setBalance(EMPTY_BALANCE);
-          return;
-        }
-
-        const response = await fetch(`${BACKEND_URL}/api/wallet/balance`, {
-          credentials: 'include',
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
+        const response = await authenticatedFetch('/api/wallet/balance');
         const payload = await response.json().catch(() => ({}));
         const walletBalance = payload.balance;
 

@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import Container from "@/components/ui/Container";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
+import { storeAuthSession } from '@/lib/auth';
 
 const HIGHLIGHTS = [
   {
@@ -36,28 +37,6 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-useEffect(() => {
-    if (turnkey.clientState !== "ready") return;
-    if (!turnkey.user) return;
-    if (!turnkey.session) return;
-
-    const key =
-        turnkey.user.userId +
-        ":" +
-        turnkey.session.organizationId;
-
-    if (submittedSession.current === key) return;
-
-    submittedSession.current = key;
-
-    createBackendSession();
-
-}, [
-    turnkey.clientState,
-    turnkey.user,
-    turnkey.session,
-]);
-
   async function login() {
   try {
     setLoading(true);
@@ -72,7 +51,7 @@ useEffect(() => {
   }
 }
 
-async function createBackendSession() {
+async function createBackendSession(sessionKey) {
   try {
     console.log("Turnkey User:", turnkey.user);
 
@@ -107,63 +86,27 @@ async function createBackendSession() {
       throw new Error(payload.message);
     }
 
-    localStorage.setItem(
-      "accessToken",
-      payload.accessToken
-    );
-
-    router.push("/dashboard");
+    storeAuthSession(payload);
+    submittedSession.current = sessionKey;
+    router.replace('/dashboard');
 
   } catch (err) {
     console.error(err);
+    setError(err.message || 'Unable to create an application session.');
+    submittedSession.current = null;
+  } finally {
+    setLoading(false);
   }
 }
-  /*async function login() {
-  try {
-    setLoading(true);
-    setError("");
 
-    // Authenticate with Turnkey
-    await handleLogin();
-
-    // Fetch the authenticated user from the Wallet Kit
-    const user = await fetchUser();
-    // console.log(user);
-    console.log(JSON.stringify(user, null, 2));
-
-    const response = await fetch(`${backendUrl}/api/auth/login`, {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        turnkeyUserId: user.userId,
-        organizationId: user.organizationId,
-        email:
-          user.userEmail ||
-          user.email ||
-          user.emails?.[0]?.emailAddress ||
-          "",
-      }),
-    });
-
-    const payload = await response.json();
-
-    if (!response.ok) {
-      throw new Error(payload.message || "Backend login failed.");
-    }
-
-    localStorage.setItem("accessToken", payload.accessToken);
-
-    router.push("/dashboard");
-    } catch (err) {
-      console.error(err);
-      setError(err.message || "Unable to sign in.");
-    } finally {
-      setLoading(false);
-    }
-  }*/
+  useEffect(() => {
+    if (turnkey.clientState !== 'ready' || !turnkey.user || !turnkey.session) return;
+    const sessionKey = `${turnkey.user.userId}:${turnkey.session.organizationId}`;
+    if (submittedSession.current !== sessionKey) createBackendSession(sessionKey);
+    // The Turnkey objects are intentionally the dependencies; including this function would
+    // retrigger a backend login whenever this component renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [turnkey.clientState, turnkey.user, turnkey.session]);
 
   return (
     <main className="grid-motif relative min-h-screen overflow-hidden bg-bg lg:grid lg:grid-cols-2">
