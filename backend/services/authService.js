@@ -1,144 +1,74 @@
+const bcrypt = require('bcrypt');
 const User = require('../models/User');
 const { ApiError } = require('../utils/helpers');
-const turnkeyService = require('./turnkeyService');
-const {
-  signAccessToken,
-  signRefreshToken,
-  verifyRefreshToken,
-} = require('../config/jwt');
+const { signAccessToken, signRefreshToken, verifyRefreshToken } = require('../config/jwt');
 
 function tokensFor(user) {
   const payload = { sub: user._id.toString(), email: user.email };
-  return {
-    accessToken: signAccessToken(payload),
-    refreshToken: signRefreshToken({ sub: payload.sub }),
-  };
+  return { accessToken: signAccessToken(payload), refreshToken: signRefreshToken({ sub: payload.sub }) };
 }
 
-async function register({
-  turnkeyUserId,
-  organizationId,
-  email,
-}) {
-  // Turnkey's own user object doesn't guarantee an email (passkey-only
-  // signups have none) -- normalize falsy/empty values to `undefined`
-  // so it's never persisted as "" and the model's sparse unique index
-  // behaves correctly.
-  const normalizedEmail = email || undefined;
+function safeUser(user) {
+  const result = user.toObject ? user.toObject() : user;
+  delete result.passwordHash;
+  delete result.secretWordHash;
+  delete result.secretWordMask;
+  delete result.secretOffset;
+  delete result.positionKeys;
+  return result;
+}
 
-  const dedupeConditions = [{ turnkeyUserId }];
-  if (normalizedEmail) dedupeConditions.push({ email: normalizedEmail });
+function normalizeEmail(email) { return String(email || '').trim().toLowerCase() || undefined; }
 
-  const existingUser = await User.findOne({ $or: dedupeConditions });
-
-  if (existingUser) {
-    throw new ApiError(
-      409,
-      "A local account already exists."
-    );
+async function register({ email, password, turnkeyUserId, organizationId }) {
+  const normalizedEmail = normalizeEmail(email);
+  if (password) {
+    if (!normalizedEmail) throw new ApiError(400, 'Email is required for password registration.');
+    if (String(password).length < 10) throw new ApiError(400, 'Password must be at least 10 characters long.');
+    if (await User.exists({ email: normalizedEmail })) throw new ApiError(409, 'An account with this email already exists.');
+    const user = await User.create({ email: normalizedEmail, passwordHash: await bcrypt.hash(password, Number(process.env.BCRYPT_ROUNDS) || 12) });
+    return { user: safeUser(user), ...tokensFor(user) };
   }
-
-try {
-    user = await User.create({
-        turnkeyUserId,
-        organizationId,
-        email: normalizedEmail,
-    });
-} catch (err) {
-    console.log("Mongo duplicate error:");
-    console.log(err);
-
-    console.log("keyPattern:", err.keyPattern);
-    console.log("keyValue:", err.keyValue);
-
-    throw err;
+  if (!turnkeyUserId || !organizationId) throw new ApiError(400, 'turnkeyUserId and organizationId are required for Turnkey registration.');
+  const existing = await User.findOne({ $or: [{ turnkeyUserId }, ...(normalizedEmail ? [{ email: normalizedEmail }] : [])] });
+  if (existing) throw new ApiError(409, 'A local account already exists.');
+  const user = await User.create({ turnkeyUserId, organizationId, email: normalizedEmail });
+  return { user: safeUser(user), ...tokensFor(user) };
 }
 
-  return {
-    user,
-    ...tokensFor(user),
-  };
-}
-
-async function login({
-  turnkeyUserId,
-  organizationId,
-  email,
-}) {
-  console.log("========== LOGIN ==========");
-  console.log("Incoming userId:", turnkeyUserId);
-  console.log("Incoming email:", email);
-  console.log("Incoming organizationId:", organizationId);
-
-  const normalizedEmail = email || undefined;
-
-  // First try Turnkey id
-  let user = await User.findOne({
-    turnkeyUserId,
-  });
-
-  console.log("Found by turnkeyUserId:", user);
-
-  // If not found, try email
-  if (!user && normalizedEmail) {
-    user = await User.findOne({
-      email: normalizedEmail,
-    });
-
-    console.log("Found by email:", user);
-
-    // Existing account -> attach Turnkey id
-    if (user) {
-      console.log("Updating existing user with new Turnkey ID");
-
-      user.turnkeyUserId = turnkeyUserId;
-      user.organizationId = organizationId;
-      await user.save();
-    }
+async function login({ email, password, turnkeyUserId, organizationId }) {
+  const normalizedEmail = normalizeEmail(email);
+  if (password !== undefined) {
+    const user = await User.findOne({ email: normalizedEmail }).select('+passwordHash');
+    if (!user || !user.passwordHash || !(await bcrypt.compare(String(password), user.passwordHash))) throw new ApiError(401, 'Invalid email or password.');
+    return { user: safeUser(user), ...tokensFor(user) };
   }
-
-  // Brand new user
-// Brand new user
-if (!user) {
-    try {
-        user = await User.create({
-            turnkeyUserId,
-            organizationId,
-            email: normalizedEmail,
-        });
-    } catch (err) {
-        console.log("================================");
-        console.log(err);
-        console.log("Error code:", err.code);
-        console.log("Key Pattern:", err.keyPattern);
-        console.log("Key Value:", err.keyValue);
-        console.log("================================");
-
-        throw err;
-    }
-}
-
-  console.log("Final user:", user);
-  console.log("==========================");
-
-  return {
-    user,
-    ...tokensFor(user),
-  };
+  if (!turnkeyUserId || !organizationId) throw new ApiError(400, 'turnkeyUserId and organizationId are required for Turnkey login.');
+  let user = await User.findOne({ turnkeyUserId });
+  if (!user && normalizedEmail) user = await User.findOne({ email: normalizedEmail });
+  if (user) {
+    user.turnkeyUserId = turnkeyUserId;
+    user.organizationId = organizationId;
+    if (normalizedEmail) user.email = normalizedEmail;
+    await user.save();
+  } else user = await User.create({ turnkeyUserId, organizationId, email: normalizedEmail });
+  return { user: safeUser(user), ...tokensFor(user) };
 }
 
 async function refresh(refreshToken) {
   if (!refreshToken) throw new ApiError(401, 'Missing refresh token.');
-  const { sub } = verifyRefreshToken(refreshToken);
+  let sub;
+  try { ({ sub } = verifyRefreshToken(refreshToken)); }
+  catch { throw new ApiError(401, 'Invalid or expired refresh token.'); }
   const user = await User.findById(sub);
   if (!user) throw new ApiError(401, 'Session is no longer valid.');
-  return { user, ...tokensFor(user) };
+  return { user: safeUser(user), ...tokensFor(user) };
 }
 
 async function getUser(userId) {
   const user = await User.findById(userId);
   if (!user) throw new ApiError(404, 'User not found.');
-  return user;
+  return safeUser(user);
 }
 
 module.exports = { register, login, refresh, getUser };

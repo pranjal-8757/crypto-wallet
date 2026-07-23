@@ -4,10 +4,11 @@ const { protect } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
-router.get('/', protect, walletController.getWallet);
+router.get('/', (req, res) => {
+  res.send("OK");
+});
 router.post('/', protect, walletController.saveWallet);
 router.get('/balance', protect, walletController.getBalance);
 router.post('/send', protect, walletController.sendEth);
 
 module.exports = router;
-

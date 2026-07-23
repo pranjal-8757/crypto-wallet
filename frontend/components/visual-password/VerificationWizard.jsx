@@ -43,8 +43,8 @@ export default function VerificationWizard({ credentials, transaction, onVerifie
         body: JSON.stringify(transaction),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.message);
-      setChallenge(payload.challenge);
+      if (!response.ok || !payload.challengeId) throw new Error(payload.message || 'Invalid challenge response.');
+      setChallenge(payload);
     } catch {
       setStatus('failed');
     }
@@ -80,7 +80,7 @@ export default function VerificationWizard({ credentials, transaction, onVerifie
       const response = await authenticatedFetch('/v1/challenge/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ challengeId: challenge?.challengeId, visualPasswordRegister, amount: amountVerificationCode, recipientRegister }),
+        body: JSON.stringify({ challengeId: challenge?.challengeId, visualPasswordRegister, amount: String(transaction?.amount ?? ''), recipientRegister }),
       });
       const payload = await response.json();
       if (!response.ok || !payload.verified) return setStatus('failed');

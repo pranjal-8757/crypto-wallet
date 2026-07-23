@@ -12,7 +12,7 @@ const jwt = require('jsonwebtoken');
 
 const jwtConfig = {
   accessSecret: process.env.JWT_SECRET,
-  accessExpiresIn: process.env.JWT_EXPIRES_IN || '15m',
+  accessExpiresIn: process.env.JWT_EXPIRES_IN || '24h',
   refreshSecret: process.env.JWT_REFRESH_SECRET,
   refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
   refreshCookieName: process.env.JWT_COOKIE_NAME || 'vault_refresh_token',
@@ -23,8 +23,13 @@ const jwtConfig = {
  * @param {{ sub: string, email?: string }} payload
  * @returns {string}
  */
+function requireSecret(secret, name) {
+  if (!secret) throw new Error(`${name} must be configured.`);
+  return secret;
+}
+
 function signAccessToken(payload) {
-  return jwt.sign(payload, jwtConfig.accessSecret, {
+  return jwt.sign(payload, requireSecret(jwtConfig.accessSecret, 'JWT_SECRET'), {
     expiresIn: jwtConfig.accessExpiresIn,
   });
 }
@@ -35,7 +40,7 @@ function signAccessToken(payload) {
  * @returns {object} decoded payload
  */
 function verifyAccessToken(token) {
-  return jwt.verify(token, jwtConfig.accessSecret);
+  return jwt.verify(token, requireSecret(jwtConfig.accessSecret, 'JWT_SECRET'));
 }
 
 /**
@@ -45,7 +50,7 @@ function verifyAccessToken(token) {
  * @returns {string}
  */
 function signRefreshToken(payload) {
-  return jwt.sign(payload, jwtConfig.refreshSecret, {
+  return jwt.sign(payload, requireSecret(jwtConfig.refreshSecret, 'JWT_REFRESH_SECRET'), {
     expiresIn: jwtConfig.refreshExpiresIn,
   });
 }
@@ -56,7 +61,7 @@ function signRefreshToken(payload) {
  * @returns {object} decoded payload
  */
 function verifyRefreshToken(token) {
-  return jwt.verify(token, jwtConfig.refreshSecret);
+  return jwt.verify(token, requireSecret(jwtConfig.refreshSecret, 'JWT_REFRESH_SECRET'));
 }
 
 module.exports = {

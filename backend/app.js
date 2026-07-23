@@ -9,6 +9,7 @@ const walletRoutes = require('./routes/wallet');
 const transactionRoutes = require('./routes/transaction');
 const recoveryRoutes = require('./routes/recovery');
 const sdkRoutes = require('./routes/sdk');
+const visualPasswordRoutes = require('./routes/visualPassswordRoutes');
 const settingsRoutes = require('./routes/settings');
 const rateLimit = require('./middleware/rateLimit');
 
@@ -62,6 +63,7 @@ app.use('/api/history', transactionRoutes);
 app.use('/api/recovery', recoveryRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/sdk', sdkRoutes);
+app.use('/v1', visualPasswordRoutes);
 
 // --------------------------------------------------------------
 // 404 + centralized error handling (must be registered last)
