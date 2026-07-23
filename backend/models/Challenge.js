@@ -1,45 +1,21 @@
 const mongoose = require('mongoose');
 
-/**
- * models/Challenge.js
- *
- * Represents a single Visual Password SDK challenge (e.g. a pattern,
- * amount, or recipient verification tied to a transaction). This
- * phase only defines the schema so the SDK has somewhere to persist
- * challenges once it's integrated -- no challenge is ever created or
- * verified by this codebase yet.
- */
+
 const challengeSchema = new mongoose.Schema(
   {
-    challengeId: {
-      type: String,
-      required: true,
-      unique: true,
-    },
-    purpose: {
-      type: String,
-      enum: ['visual-password', 'amount-verification', 'recipient-verification', 'recovery'],
-      required: true,
-    },
-    recipient: {
-      type: String,
-      default: null,
-    },
-    amount: {
-      type: String,
-      default: null,
-    },
-    expiresAt: {
-      type: Date,
-      required: true,
-    },
-    status: {
-      type: String,
-      enum: ['pending', 'verified', 'expired', 'failed'],
-      default: 'pending',
-    },
+    challengeId: { type: String, required: true, unique: true, index: true },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    purpose: { type: String, enum: ['visual-password'], default: 'visual-password' },
+    maskedWord: { type: String, required: true },
+    challengeNumber: { type: Number, required: true },
+    expectedDigits: { type: String, required: true, select: false },
+    amount: { type: String, required: true },
+    recipientCode: { type: String, required: true, select: false },
+    expiresAt: { type: Date, required: true, index: { expires: 0 } },
+    used: { type: Boolean, default: false, index: true },
+    usedAt: { type: Date, default: null },
   },
-  { timestamps: { createdAt: true, updatedAt: true } }
+  { timestamps: true }
 );
 
 module.exports = mongoose.model('Challenge', challengeSchema);

@@ -1,4 +1,4 @@
-const { verifyAccessToken } = require('../config/jwt');
+  const { verifyAccessToken } = require('../config/jwt');
 const { ApiError, asyncHandler } = require('../utils/helpers');
 
 /**
@@ -10,6 +10,8 @@ const { ApiError, asyncHandler } = require('../utils/helpers');
  * happens on the client against Turnkey. This middleware only guards
  * this backend's endpoints once a session already exists.
  */
+
+
 const protect = asyncHandler(async (req, res, next) => {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
@@ -26,5 +28,4 @@ const protect = asyncHandler(async (req, res, next) => {
     throw new ApiError(401, 'Invalid or expired access token.');
   }
 });
-
 module.exports = { protect };

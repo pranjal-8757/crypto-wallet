@@ -40,7 +40,6 @@ function errorHandler(err, req, res, next) {
     success: false,
     message,
     ...(details ? { details } : {}),
-    ...(process.env.NODE_ENV !== 'production' ? { stack: err.stack } : {}),
   });
 }
 

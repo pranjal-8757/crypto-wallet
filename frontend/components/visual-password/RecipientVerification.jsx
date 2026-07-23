@@ -8,6 +8,11 @@ import RegisterInputs from './RegisterInputs';
 export default function RecipientVerification({ address, positionKeys, onContinue, onBack }) {
   const [register, setRegister] = useState({});
   const isComplete = positionKeys.every((key) => register[key] !== '' && register[key] !== undefined);
+  const recipientCode = String(address || '').trim().slice(-2).toUpperCase();
+  const matchesRecipient = recipientCode.length === positionKeys.length && positionKeys.every(
+    (key, index) => String(register[key] || '').toUpperCase() === recipientCode[index]
+  );
+  const recipientRegister = Object.fromEntries(positionKeys.map((key) => [key, register[key]]));
   return <div className="vp-theme flex flex-col gap-6"><div>
     <div className="flex items-center gap-2 text-sm font-semibold text-[var(--vp-primary-hover)]">
       <Wallet className="h-4 w-4" />Recipient Verification</div>
@@ -23,6 +28,6 @@ export default function RecipientVerification({ address, positionKeys, onContinu
           onChange={setRegister} />
         <div className="flex gap-3">
           <Button theme="light" variant="secondary" fullWidth onClick={onBack}>Back</Button>
-          <Button theme="light" fullWidth disabled={!isComplete} onClick={() => onContinue({ register })}>Continue</Button></div>
+          <Button theme="light" fullWidth disabled={!isComplete || !matchesRecipient} onClick={() => onContinue({ register: recipientRegister })}>Continue</Button></div>
           </div>;
 }

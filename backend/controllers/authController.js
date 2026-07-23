@@ -1,7 +1,8 @@
 const { asyncHandler, sendSuccess } = require('../utils/helpers'); const authService = require('../services/authService'); const { jwtConfig } = require('../config/jwt');
-function setRefresh(res, token) { res.cookie(jwtConfig.refreshCookieName, token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 }); }
+function cookieOptions() { return { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/' }; }
+function setRefresh(res, token) { res.cookie(jwtConfig.refreshCookieName, token, { ...cookieOptions(), maxAge: 7 * 24 * 60 * 60 * 1000 }); }
 exports.register = asyncHandler(async (req, res) => { const result = await authService.register(req.body); setRefresh(res, result.refreshToken); sendSuccess(res, 201, { user: result.user, accessToken: result.accessToken }); });
 exports.login = asyncHandler(async (req, res) => { const result = await authService.login(req.body); setRefresh(res, result.refreshToken); sendSuccess(res, 200, { user: result.user, accessToken: result.accessToken }); });
 exports.refresh = asyncHandler(async (req, res) => { const result = await authService.refresh(req.cookies[jwtConfig.refreshCookieName]); setRefresh(res, result.refreshToken); sendSuccess(res, 200, { user: result.user, accessToken: result.accessToken }); });
-exports.logout = asyncHandler(async (req, res) => { res.clearCookie(jwtConfig.refreshCookieName, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax' }); sendSuccess(res, 200, { message: 'Signed out.' }); });
+exports.logout = asyncHandler(async (req, res) => { res.clearCookie(jwtConfig.refreshCookieName, cookieOptions()); sendSuccess(res, 200, { message: 'Signed out.' }); });
 exports.getCurrentUser = asyncHandler(async (req, res) => sendSuccess(res, 200, { user: await authService.getUser(req.user.id) }));

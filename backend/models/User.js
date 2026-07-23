@@ -1,5 +1,31 @@
 const mongoose = require('mongoose');
 
+const userSchema = new mongoose.Schema(
+  {
+    email: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
+    passwordHash: { type: String, select: false, default: undefined },
+    // Turnkey fields remain optional so password-only SDK users and existing wallet users coexist.
+    turnkeyUserId: { type: String, unique: true, sparse: true, default: undefined },
+    organizationId: { type: String, default: undefined },
+    walletId: { type: String, default: null },
+    walletAddress: { type: String, default: null },
+    visualPassword: { type: Boolean, default: false },
+    secretWordHash: { type: String, select: false, default: undefined },
+    // A masked representation permits a challenge without storing the plaintext secret word.
+    secretWordMask: { type: String, default: undefined },
+    secretOffset: { type: Number, default: undefined },
+    positionKeys: { type: [String], default: undefined },
+    preferences: { notifications: { type: Boolean, default: true } },
+  },
+  { timestamps: true }
+);
+
+module.exports = mongoose.model('User', userSchema);
+
+
+
+//const mongoose = require('mongoose');
+
 /**
  * models/User.js
  *
@@ -14,6 +40,8 @@ const mongoose = require('mongoose');
  * up with a passkey only, without ever linking an email, will have
  * no `userEmail` on their Turnkey user object at all.
  */
+
+/*
 const userSchema = new mongoose.Schema(
   {
     email: {
@@ -50,3 +78,4 @@ const userSchema = new mongoose.Schema(
 );
 
 module.exports = mongoose.model('User', userSchema);
+*/
