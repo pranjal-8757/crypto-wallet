@@ -9,7 +9,6 @@ import EmailInput from './EmailInput';
 import OTPInput from './OTPInput';
 import RecoveryComplete from './RecoveryComplete';
 import RecoveryFailed from './RecoveryFailed';
-import VisualPasswordChallenge from '../verification/VisualPasswordChallenge';
 import { useRecovery } from '@/hooks/useRecovery';
 
 /**
@@ -43,6 +42,7 @@ export default function RecoveryWizard({ onDone }) {
     reset,
     submitEmail,
     submitOtp,
+    message,
   } = recovery;
 
   const renderStep = () => {
@@ -73,12 +73,12 @@ export default function RecoveryWizard({ onDone }) {
 
       case 'email':
         return (
-          <EmailInput
+          <><EmailInput
             value={email}
             onChange={setEmail}
             onContinue={submitEmail}
             loading={status === 'verifying'}
-          />
+          />{message && <p className={`mt-3 text-sm ${status === 'failed' ? 'text-red-500' : 'text-green-600'}`}>{message}</p>}</>
         );
 
       case 'otp':
@@ -96,7 +96,7 @@ export default function RecoveryWizard({ onDone }) {
         );
 
       case 'visual-password':
-        return <VisualPasswordChallenge onContinue={goNext} />;
+        return <div className="flex flex-col gap-3 py-8 text-center"><h3 className="text-xl font-bold text-[var(--vp-text-primary)]">Email verified</h3><p className="text-base text-[var(--vp-text-secondary)]">Visual Password verification will be available in the next recovery step.</p></div>;
 
       case 'new-passkey':
         return (

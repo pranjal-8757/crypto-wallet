@@ -3,68 +3,48 @@ const bcrypt = require('bcrypt');
 const Recovery = require('../models/Recovery');
 const User = require('../models/User');
 const { ApiError } = require('../utils/helpers');
-const challengeService = require('./challengeService');
-const verificationService = require('./verificationService');
-const { generateRecoveryAuthorizationToken } = require('./tokenService');
+const { generateOtp } = require('../utils/otp');
 
-const OTP_TTL_MS = 10 * 60 * 1000;
-const RECOVERY_TTL_MS = 60 * 60 * 1000;
+const OTP_TTL_MS = 5 * 60 * 1000;
 
-async function getRecovery(recoveryId) {
-  const recovery = await Recovery.findById(recoveryId).populate('userId');
-  if (!recovery || recovery.expiresAt < new Date()) throw new ApiError(400, 'Recovery request has expired.');
-  return recovery;
+async function sendOtpEmail({ email, otp }) {
+  let nodemailer;
+  try { nodemailer = require('nodemailer'); }
+  catch { throw new ApiError(503, 'Recovery email delivery is not configured.'); }
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT || 587),
+    secure: process.env.SMTP_SECURE === 'true',
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+  });
+  await transporter.sendMail({ from: process.env.SMTP_FROM || process.env.SMTP_USER, to: email, subject: 'Your Vault recovery code', text: `Your recovery code is ${otp}. It expires in 5 minutes.` });
 }
 
 async function startRecovery({ email }) {
   const user = await User.findOne({ email: String(email).trim().toLowerCase() });
   if (!user) throw new ApiError(404, 'No account matches that email address.');
-  const otp = crypto.randomInt(100000, 1000000).toString();
-  const recovery = await Recovery.create({
-    userId: user._id,
-    email: user.email,
-    otpHash: await bcrypt.hash(otp, Number(process.env.BCRYPT_ROUNDS) || 12),
-    otpExpiresAt: new Date(Date.now() + OTP_TTL_MS),
-    expiresAt: new Date(Date.now() + RECOVERY_TTL_MS),
-  });
-  // Email delivery is supplied by the deployment; development exposes the code for local testing.
-  return { recoveryId: recovery._id, expiresAt: recovery.expiresAt, ...(process.env.NODE_ENV === 'development' ? { developmentOtp: otp } : {}) };
+  const now = new Date();
+  await Recovery.updateMany({ userId: user._id, verified: false, expiresAt: { $gt: now } }, { $set: { expiresAt: now, otpExpiresAt: now } });
+  const otp = generateOtp(6);
+  const expiresAt = new Date(Date.now() + OTP_TTL_MS);
+  const recoveryId = crypto.randomUUID();
+  const recovery = await Recovery.create({ recoveryId, userId: user._id, email: user.email, otpHash: await bcrypt.hash(otp, Number(process.env.BCRYPT_ROUNDS) || 12), otpExpiresAt: expiresAt, expiresAt, attempts: 0, verified: false });
+  await sendOtpEmail({ email: user.email, otp });
+  return { recoveryId: recovery.recoveryId, expiresIn: 300 };
 }
 
 async function verifyEmail({ recoveryId, otp }) {
-  const recovery = await Recovery.findById(recoveryId).select('+otpHash');
-  if (!recovery || recovery.expiresAt < new Date()) throw new ApiError(400, 'Recovery request has expired.');
+  const recovery = await Recovery.findOne({ recoveryId }).select('+otpHash');
+  if (!recovery || recovery.expiresAt <= new Date() || recovery.otpExpiresAt <= new Date()) throw new ApiError(400, 'Recovery code has expired.');
   if (recovery.attempts >= 5) throw new ApiError(429, 'Too many verification attempts.');
   recovery.attempts += 1;
-  if (!recovery.otpExpiresAt || !(await bcrypt.compare(String(otp), recovery.otpHash))) {
-    await recovery.save();
-    throw new ApiError(400, 'Invalid or expired one-time code.');
-  }
+  if (!recovery.otpHash || !(await bcrypt.compare(String(otp), recovery.otpHash))) { await recovery.save(); throw new ApiError(400, 'Invalid recovery code.'); }
+  recovery.verified = true;
   recovery.emailVerified = true;
   recovery.recoveryStatus = 'email_verified';
   recovery.otpHash = undefined;
   await recovery.save();
-  return recovery;
+  return { verified: true };
 }
 
-async function startVisualPasswordChallenge({ recoveryId }) {
-  const recovery = await getRecovery(recoveryId);
-  if (!recovery.emailVerified) throw new ApiError(409, 'Verify email before the Visual Password step.');
-  const user = recovery.userId;
-  if (!user.walletAddress) throw new ApiError(409, 'A wallet address is required for recovery verification.');
-  const transaction = { recipient: user.walletAddress, amount: 'Recovery', network: 'Account Recovery', symbol: '' };
-  return { challenge: await challengeService.createChallenge(user, transaction), transaction };
-}
-
-async function verifyRecovery({ recoveryId, verificationPayload }) {
-  const recovery = await getRecovery(recoveryId);
-  if (!recovery.emailVerified) throw new ApiError(409, 'Verify email before the Visual Password step.');
-  const result = await verificationService.verifyChallenge({ user: recovery.userId, ...verificationPayload });
-  if (!result.verified) throw new ApiError(403, 'Visual Password verification was not accepted.');
-  recovery.visualPasswordVerified = true;
-  recovery.recoveryStatus = 'visual_password_verified';
-  await recovery.save();
-  return { verified: true, recoveryAuthorizationToken: generateRecoveryAuthorizationToken({ userId: recovery.userId._id, recoveryId: recovery._id }) };
-}
-
-module.exports = { startRecovery, verifyEmail, startVisualPasswordChallenge, verifyRecovery };
+module.exports = { startRecovery, verifyEmail };

@@ -10,6 +10,7 @@ const mongoose = require('mongoose');
  */
 const recoverySchema = new mongoose.Schema(
   {
+    recoveryId: { type: String, required: true, unique: true, index: true },
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -19,6 +20,7 @@ const recoverySchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    verified: { type: Boolean, default: false },
     visualPasswordVerified: {
       type: Boolean,
       default: false,
